@@ -1,0 +1,5 @@
+{
+  "name": "Điểm Danh Bán Trú",
+  "description": "Ứng dụng điểm danh học sinh bán trú trưa và tối, xuất báo cáo Excel.",
+  "requestFramePermissions": []
+}
