@@ -14,6 +14,7 @@ interface RoomData {
 
 interface AbsentStudent {
   name: string;
+  className: string;
   reason: string;
 }
 
@@ -38,6 +39,7 @@ export default function TeacherInput() {
   const [currentRoomIndex, setCurrentRoomIndex] = useState<number | null>(null);
   const [tempAbsentList, setTempAbsentList] = useState<AbsentStudent[]>([]);
   const [newName, setNewName] = useState("");
+  const [newClassName, setNewClassName] = useState("");
   const [newReason, setNewReason] = useState("");
 
   // Load existing data if any
@@ -92,29 +94,49 @@ export default function TeacherInput() {
     const parsedList: AbsentStudent[] = [];
     
     if (details) {
-      // Parse existing string: "Name (Reason); Name (Reason)"
+      // Parse existing string: "Name - Class (Reason); Name (Reason)"
       const parts = details.split(';');
       parts.forEach(part => {
-        const match = part.trim().match(/^(.*?)\s*\((.*?)\)$/);
-        if (match) {
-          parsedList.push({ name: match[1].trim(), reason: match[2].trim() });
-        } else if (part.trim()) {
-          // Fallback for simple strings or other formats
-          parsedList.push({ name: part.trim(), reason: "" });
+        let name = part.trim();
+        let className = "";
+        let reason = "";
+
+        // Extract reason first (content in parens at the end)
+        const reasonMatch = name.match(/^(.*)\s*\((.*)\)$/);
+        if (reasonMatch) {
+            name = reasonMatch[1].trim();
+            reason = reasonMatch[2].trim();
+        }
+
+        // Extract class from name (Name - Class)
+        const classMatch = name.match(/^(.*)\s*-\s*(.*)$/);
+        if (classMatch) {
+            name = classMatch[1].trim();
+            className = classMatch[2].trim();
+        }
+
+        if (name) {
+            parsedList.push({ name, className, reason });
         }
       });
     }
     
     setTempAbsentList(parsedList);
     setNewName("");
+    setNewClassName("");
     setNewReason("");
     setIsModalOpen(true);
   };
 
   const addStudentToTempList = () => {
     if (!newName.trim()) return;
-    setTempAbsentList([...tempAbsentList, { name: newName.trim(), reason: newReason.trim() }]);
+    setTempAbsentList([...tempAbsentList, { 
+        name: newName.trim(), 
+        className: newClassName.trim(),
+        reason: newReason.trim() 
+    }]);
     setNewName("");
+    setNewClassName("");
     setNewReason("");
   };
 
@@ -126,9 +148,14 @@ export default function TeacherInput() {
 
   const saveModalData = () => {
     if (currentRoomIndex !== null) {
-      // Serialize back to string: "Name (Reason); Name (Reason)"
+      // Serialize back to string: "Name - Class (Reason); Name (Reason)"
       const detailsString = tempAbsentList
-        .map(s => s.reason ? `${s.name} (${s.reason})` : s.name)
+        .map(s => {
+            let str = s.name;
+            if (s.className) str += ` - ${s.className}`;
+            if (s.reason) str += ` (${s.reason})`;
+            return str;
+        })
         .join('; ');
       
       handleRoomChange(currentRoomIndex, "absentDetails", detailsString);
@@ -350,30 +377,38 @@ export default function TeacherInput() {
                     </button>
                 </div>
                 
-                <div className="p-6 space-y-5">
+                <div className="p-6 space-y-6">
                     {/* List of added students */}
-                    <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 min-h-[120px] max-h-[200px] overflow-y-auto custom-scrollbar">
+                    <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 min-h-[120px] max-h-[240px] overflow-y-auto custom-scrollbar">
                         {tempAbsentList.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center h-full text-gray-400 space-y-2 py-4">
-                              <User className="h-8 w-8 opacity-20" />
+                            <div className="flex flex-col items-center justify-center h-full text-gray-400 space-y-2 py-8">
+                              <User className="h-10 w-10 opacity-20" />
                               <p className="text-sm italic">Chưa có học sinh nào được thêm</p>
                             </div>
                         ) : (
-                            <div className="space-y-2">
+                            <div className="space-y-3">
                               {tempAbsentList.map((student, idx) => (
-                                  <div key={idx} className="flex justify-between items-center bg-white p-3 rounded-lg border border-gray-200 shadow-sm group hover:border-indigo-200 transition-colors">
-                                      <div>
-                                          <span className="font-semibold text-gray-800 block">{student.name}</span>
+                                  <div key={idx} className="flex justify-between items-start bg-white p-3 rounded-xl border border-gray-200 shadow-sm hover:border-indigo-300 hover:shadow-md transition-all group">
+                                      <div className="flex-1 min-w-0">
+                                          <div className="flex items-center gap-2 mb-1">
+                                              <span className="font-bold text-gray-900 truncate">{student.name}</span>
+                                              {student.className && (
+                                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-800 border border-indigo-200">
+                                                      {student.className}
+                                                  </span>
+                                              )}
+                                          </div>
                                           {student.reason && (
-                                              <span className="text-gray-500 text-xs flex items-center mt-0.5">
-                                                <span className="w-1.5 h-1.5 bg-gray-300 rounded-full mr-1.5"></span>
-                                                {student.reason}
-                                              </span>
+                                              <div className="text-gray-500 text-xs flex items-center">
+                                                <span className="w-1.5 h-1.5 bg-gray-400 rounded-full mr-2 flex-shrink-0"></span>
+                                                <span className="truncate">{student.reason}</span>
+                                              </div>
                                           )}
                                       </div>
                                       <button 
                                           onClick={() => removeStudentFromTempList(idx)}
-                                          className="text-gray-400 hover:text-red-500 p-1.5 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+                                          className="ml-2 text-gray-400 hover:text-red-500 p-1.5 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+                                          title="Xóa"
                                       >
                                           <X className="h-4 w-4" />
                                       </button>
@@ -383,39 +418,69 @@ export default function TeacherInput() {
                         )}
                     </div>
 
-                    <div className="space-y-3">
-                        <label className="text-sm font-semibold text-gray-700 block">Thêm học sinh mới</label>
-                        <div className="space-y-3">
+                    <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                            <label className="text-sm font-bold text-gray-900">Thêm học sinh mới</label>
+                            <span className="text-xs text-gray-500 font-normal">Nhập thông tin bên dưới</span>
+                        </div>
+                        
+                        <div className="space-y-3 bg-white p-1 rounded-xl">
                             <input
                                 type="text"
                                 value={newName}
                                 onChange={(e) => setNewName(e.target.value)}
                                 placeholder="Nhập tên học sinh..."
                                 className="block w-full rounded-xl border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm p-3 border bg-gray-50 focus:bg-white transition-colors"
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        // Focus next input or add if valid
+                                    }
+                                }}
                             />
-                            <div className="flex gap-2">
-                              <input
-                                  type="text"
-                                  value={newReason}
-                                  onChange={(e) => setNewReason(e.target.value)}
-                                  placeholder="Lý do (VD: Ốm...)"
-                                  className="block w-full rounded-xl border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm p-3 border bg-gray-50 focus:bg-white transition-colors"
-                                  onKeyDown={(e) => {
-                                      if (e.key === 'Enter') {
-                                          e.preventDefault();
-                                          addStudentToTempList();
-                                      }
-                                  }}
-                              />
-                              <button
-                                  type="button"
-                                  onClick={addStudentToTempList}
-                                  disabled={!newName.trim()}
-                                  className="inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-xl text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-all hover:shadow-md active:scale-95 whitespace-nowrap"
-                              >
-                                  <Plus className="h-5 w-5" />
-                              </button>
+                            
+                            <div className="grid grid-cols-3 gap-3">
+                                <div className="col-span-1">
+                                    <input
+                                        type="text"
+                                        value={newClassName}
+                                        onChange={(e) => setNewClassName(e.target.value)}
+                                        placeholder="Lớp (VD: 9A)"
+                                        className="block w-full rounded-xl border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm p-3 border bg-gray-50 focus:bg-white transition-colors"
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter') {
+                                                e.preventDefault();
+                                                addStudentToTempList();
+                                            }
+                                        }}
+                                    />
+                                </div>
+                                <div className="col-span-2">
+                                    <input
+                                        type="text"
+                                        value={newReason}
+                                        onChange={(e) => setNewReason(e.target.value)}
+                                        placeholder="Lý do (VD: Ốm...)"
+                                        className="block w-full rounded-xl border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm p-3 border bg-gray-50 focus:bg-white transition-colors"
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter') {
+                                                e.preventDefault();
+                                                addStudentToTempList();
+                                            }
+                                        }}
+                                    />
+                                </div>
                             </div>
+
+                            <button
+                                type="button"
+                                onClick={addStudentToTempList}
+                                disabled={!newName.trim()}
+                                className="w-full inline-flex justify-center items-center px-4 py-3 border border-transparent text-sm font-bold rounded-xl text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg transition-all active:scale-95 mt-2"
+                            >
+                                <Plus className="h-5 w-5 mr-2" />
+                                Thêm vào danh sách
+                            </button>
                         </div>
                     </div>
                 </div>
