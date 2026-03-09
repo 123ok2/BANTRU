@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { db } from "../firebase";
-import { collection, addDoc, query, where, getDocs, Timestamp, doc, setDoc } from "firebase/firestore";
+import { collection, addDoc, query, where, getDocs, Timestamp, doc, setDoc, onSnapshot } from "firebase/firestore";
 import { updateProfile } from "firebase/auth";
 import { format } from "date-fns";
 import { Loader2, Save, CheckCircle, Plus, X, Edit2, Calendar, Sun, Moon, User } from "lucide-react";
@@ -35,6 +35,7 @@ export default function TeacherInput() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [dirtyRooms, setDirtyRooms] = useState<Set<number>>(new Set());
 
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -116,49 +117,89 @@ export default function TeacherInput() {
 
   // Load existing data if any
   useEffect(() => {
-    const loadData = async () => {
-      if (!user) return;
-      setLoading(true);
-      setErrorMessage(null);
-      try {
-        const q = query(
-          collection(db, "attendance_records"),
-          where("date", "==", date),
-          where("session", "==", session),
-          where("teacherId", "==", user.uid)
-        );
-        const querySnapshot = await getDocs(q);
-        if (!querySnapshot.empty) {
-          const data = querySnapshot.docs[0].data();
-          // Merge loaded data with default structure to ensure all 18 rooms exist
-          const loadedRooms = data.rooms || [];
-          const mergedRooms = Array.from({ length: ROOM_COUNT }, (_, i) => {
-            const existing = loadedRooms.find((r: any) => r.roomNumber === i + 1);
-            return existing || { roomNumber: i + 1, totalStudents: "", absentDetails: "" };
+    if (!user || !session) return;
+    
+    setLoading(true);
+    setErrorMessage(null);
+    
+    const q = query(
+      collection(db, "attendance_records"),
+      where("date", "==", date),
+      where("session", "==", session)
+    );
+
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+      setLoading(false);
+      
+      if (!querySnapshot.empty) {
+        // Initialize empty structure
+        const mergedRooms: RoomData[] = Array.from({ length: ROOM_COUNT }, (_, i) => ({
+          roomNumber: i + 1,
+          totalStudents: "",
+          absentDetails: "",
+        }));
+
+        // Merge data from all documents
+        querySnapshot.forEach((doc) => {
+          const data = doc.data();
+          const docRooms = data.rooms as RoomData[] || [];
+          
+          docRooms.forEach((r) => {
+            if (r.roomNumber >= 1 && r.roomNumber <= ROOM_COUNT) {
+              if (r.totalStudents || r.absentDetails) {
+                  mergedRooms[r.roomNumber - 1] = {
+                    ...r,
+                    totalStudents: String(r.totalStudents)
+                  };
+              }
+            }
           });
-          setRooms(mergedRooms);
-        } else {
-          // Reset if no data found
-           setRooms(Array.from({ length: ROOM_COUNT }, (_, i) => ({
+        });
+        
+        // Only update local state for rooms that haven't been edited locally
+        setRooms(prevRooms => {
+          const newRooms = [...prevRooms];
+          mergedRooms.forEach((room, index) => {
+            if (!dirtyRooms.has(index)) {
+              newRooms[index] = room;
+            }
+          });
+          return newRooms;
+        });
+      } else {
+        // Reset if no data found, but keep dirty rooms
+        setRooms(prevRooms => {
+          const newRooms = Array.from({ length: ROOM_COUNT }, (_, i) => ({
             roomNumber: i + 1,
             totalStudents: "",
             absentDetails: "",
-          })));
-        }
-      } catch (error: any) {
-        console.error("Error loading data:", error);
-        setErrorMessage(error.message || "Lỗi khi tải dữ liệu. Vui lòng kiểm tra kết nối mạng hoặc quyền truy cập.");
-      } finally {
-        setLoading(false);
+          }));
+          dirtyRooms.forEach(index => {
+            newRooms[index] = prevRooms[index];
+          });
+          return newRooms;
+        });
       }
-    };
-    loadData();
-  }, [date, session, user]);
+    }, (error: any) => {
+      console.error("Error loading data:", error);
+      setErrorMessage(error.message || "Lỗi khi tải dữ liệu. Vui lòng kiểm tra kết nối mạng hoặc quyền truy cập.");
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [date, session, user, dirtyRooms]);
 
   const handleRoomChange = (index: number, field: keyof RoomData, value: any) => {
     const newRooms = [...rooms];
     newRooms[index] = { ...newRooms[index], [field]: value };
     setRooms(newRooms);
+    
+    // Mark this room as dirty (edited locally)
+    setDirtyRooms(prev => {
+      const next = new Set(prev);
+      next.add(index);
+      return next;
+    });
   };
 
   // Modal Handlers
@@ -263,18 +304,50 @@ export default function TeacherInput() {
       const q = query(
         collection(db, "attendance_records"),
         where("date", "==", date),
-        where("session", "==", session),
-        where("teacherId", "==", user.uid)
+        where("session", "==", session)
       );
       const querySnapshot = await getDocs(q);
+
+      let finalRoomsToSave = [...rooms];
+
+      if (!querySnapshot.empty) {
+        // Merge with existing data from DB to prevent overwriting other teachers' changes
+        const mergedRooms: RoomData[] = Array.from({ length: ROOM_COUNT }, (_, i) => ({
+          roomNumber: i + 1,
+          totalStudents: "",
+          absentDetails: "",
+        }));
+
+        querySnapshot.forEach((doc) => {
+          const data = doc.data();
+          const docRooms = data.rooms as RoomData[] || [];
+          docRooms.forEach((r) => {
+            if (r.roomNumber >= 1 && r.roomNumber <= ROOM_COUNT) {
+              if (r.totalStudents || r.absentDetails) {
+                  mergedRooms[r.roomNumber - 1] = {
+                    ...r,
+                    totalStudents: String(r.totalStudents)
+                  };
+              }
+            }
+          });
+        });
+
+        // Apply our dirty changes on top of the merged DB data
+        dirtyRooms.forEach(index => {
+          mergedRooms[index] = rooms[index];
+        });
+        
+        finalRoomsToSave = mergedRooms;
+      }
 
       const recordData = {
         date,
         session,
-        teacherId: user.uid,
-        teacherEmail: user.email,
-        teacherName: user.displayName || user.email, // Save teacher name
-        rooms: rooms,
+        lastUpdatedBy: user.uid,
+        lastUpdatedEmail: user.email,
+        lastUpdatedName: user.displayName || user.email, // Save teacher name
+        rooms: finalRoomsToSave,
         updatedAt: Timestamp.now(),
       };
 
@@ -285,6 +358,8 @@ export default function TeacherInput() {
         await addDoc(collection(db, "attendance_records"), recordData);
       }
       
+      setRooms(finalRoomsToSave);
+      setDirtyRooms(new Set()); // Clear dirty state after successful save
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
     } catch (error: any) {
