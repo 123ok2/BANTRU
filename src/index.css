@@ -24,6 +24,12 @@
   }
 }
 
+@layer utilities {
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
 /* Animation utilities */
 .animate-in {
   animation: animate-in 0.2s ease-out;

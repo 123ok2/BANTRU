@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { db } from "../firebase";
 import { collection, addDoc, query, where, getDocs, Timestamp, doc, setDoc } from "firebase/firestore";
+import { updateProfile } from "firebase/auth";
 import { format } from "date-fns";
 import { Loader2, Save, CheckCircle, Plus, X, Edit2, Calendar, Sun, Moon, User } from "lucide-react";
 import { cn } from "../lib/utils";
@@ -23,7 +24,7 @@ const ROOM_COUNT = 18;
 export default function TeacherInput() {
   const { user } = useAuth();
   const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
-  const [session, setSession] = useState<"noon" | "evening">("noon");
+  const [session, setSession] = useState<"noon" | "evening" | null>(null);
   const [rooms, setRooms] = useState<RoomData[]>(
     Array.from({ length: ROOM_COUNT }, (_, i) => ({
       roomNumber: i + 1,
@@ -42,6 +43,76 @@ export default function TeacherInput() {
   const [newName, setNewName] = useState("");
   const [newClassName, setNewClassName] = useState("");
   const [newReason, setNewReason] = useState("");
+
+  // Name prompt state
+  const [showNamePrompt, setShowNamePrompt] = useState(false);
+  const [promptName, setPromptName] = useState("");
+  const [promptGender, setPromptGender] = useState<"male" | "female" | "">("");
+  const [updatingName, setUpdatingName] = useState(false);
+
+  // Greeting modal state
+  const [showGreeting, setShowGreeting] = useState(false);
+  const [greetingMessage, setGreetingMessage] = useState("");
+
+  useEffect(() => {
+    if (user) {
+      // Check if user has displayName and photoURL (used for gender)
+      if (!user.displayName || !user.photoURL) {
+        setShowNamePrompt(true);
+      } else {
+        // If they have info, show greeting every time they open the app
+        const title = user.photoURL === "female" ? "Cô" : "Thầy";
+        const name = user.displayName;
+        const hour = new Date().getHours();
+        let timeGreeting = "Chào buổi tối";
+        if (hour < 12) timeGreeting = "Chào buổi sáng";
+        else if (hour < 18) timeGreeting = "Chào buổi chiều";
+        
+        setGreetingMessage(`${timeGreeting}, ${title} ${name}! Chúc ${title} một ngày làm việc hiệu quả.`);
+        setShowGreeting(true);
+      }
+    }
+  }, [user]);
+
+  const handleUpdateName = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!promptName.trim() || !promptGender || !user) return;
+    
+    setUpdatingName(true);
+    try {
+      // We use photoURL to store gender since Firebase Auth doesn't have a dedicated gender field
+      await updateProfile(user, { 
+        displayName: promptName.trim(),
+        photoURL: promptGender 
+      });
+      setShowNamePrompt(false);
+      
+      // Show greeting after updating
+      const title = promptGender === "female" ? "Cô" : "Thầy";
+      const name = promptName.trim();
+      const hour = new Date().getHours();
+      let timeGreeting = "Chào buổi tối";
+      if (hour < 12) timeGreeting = "Chào buổi sáng";
+      else if (hour < 18) timeGreeting = "Chào buổi chiều";
+      
+      setGreetingMessage(`${timeGreeting}, ${title} ${name}! Chúc ${title} một ngày làm việc hiệu quả.`);
+      setShowGreeting(true);
+      
+      // Don't reload, just let React update the UI
+    } catch (error) {
+      console.error("Error updating profile:", error);
+      alert("Có lỗi xảy ra khi cập nhật thông tin. Vui lòng thử lại.");
+    } finally {
+      setUpdatingName(false);
+    }
+  };
+
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Chào buổi sáng";
+    if (hour < 18) return "Chào buổi chiều";
+    return "Chào buổi tối";
+  };
 
   // Load existing data if any
   useEffect(() => {
@@ -177,112 +248,12 @@ export default function TeacherInput() {
     setIsModalOpen(false);
   };
 
-  const [isGeneratingMock, setIsGeneratingMock] = useState(false);
-  const [showMockConfirm, setShowMockConfirm] = useState(false);
-
-  const generateMockData = async () => {
-    if (!user) return;
-    
-    setIsGeneratingMock(true);
-    setShowMockConfirm(false);
-    
-    try {
-      const startDate = new Date("2025-09-01");
-      const endDate = new Date(); // Today
-      
-      const firstNames = ["Nguyễn", "Trần", "Lê", "Phạm", "Hoàng", "Huỳnh", "Phan", "Vũ", "Võ", "Đặng"];
-      const middleNames = ["Thị", "Văn", "Hữu", "Minh", "Ngọc", "Thanh", "Đức", "Gia", "Bảo"];
-      const lastNames = ["Anh", "Bình", "Cường", "Dung", "Duy", "Hải", "Hiếu", "Hòa", "Huy", "Khang", "Linh", "Mai", "Nam", "Nga", "Phúc", "Quân", "Trang", "Tuấn", "Vinh", "Yến"];
-      const classes = ["6A", "6B", "6C", "7A", "7B", "7C", "8A", "8B", "8C", "9A", "9B", "9C"];
-      const reasons = ["Ốm", "Có phép", "Không phép", "Về quê", "Đi khám bệnh"];
-
-      const getRandomName = () => {
-        return `${firstNames[Math.floor(Math.random() * firstNames.length)]} ${middleNames[Math.floor(Math.random() * middleNames.length)]} ${lastNames[Math.floor(Math.random() * lastNames.length)]}`;
-      };
-
-      let currentDate = new Date(startDate);
-      
-      const { writeBatch } = await import("firebase/firestore");
-      let batch = writeBatch(db);
-      let count = 0;
-
-      while (currentDate <= endDate) {
-        // Skip weekends
-        const day = currentDate.getDay();
-        if (day !== 0 && day !== 6) {
-          const dateStr = format(currentDate, "yyyy-MM-dd");
-          
-          for (const s of ["noon", "evening"] as const) {
-            const roomsData: RoomData[] = [];
-            
-            for (let i = 1; i <= ROOM_COUNT; i++) {
-              const total = Math.floor(Math.random() * 10) + 30; // 30-39
-              const absentCount = Math.random() > 0.6 ? 0 : Math.floor(Math.random() * 3) + 1; // 0 or 1-3
-              const present = total - absentCount;
-              
-              let absentDetails = "";
-              if (absentCount > 0) {
-                const absentList = [];
-                for (let j = 0; j < absentCount; j++) {
-                  const name = getRandomName();
-                  const className = classes[Math.floor(Math.random() * classes.length)];
-                  const reason = reasons[Math.floor(Math.random() * reasons.length)];
-                  absentList.push(`${name} - ${className} (${reason})`);
-                }
-                absentDetails = absentList.join("; ");
-              }
-
-              roomsData.push({
-                roomNumber: i,
-                totalStudents: `${present}/${total}`,
-                absentDetails: absentDetails
-              });
-            }
-
-            const recordData = {
-              date: dateStr,
-              session: s,
-              teacherId: user.uid,
-              teacherEmail: user.email,
-              teacherName: user.displayName || user.email,
-              rooms: roomsData,
-              updatedAt: Timestamp.now(),
-            };
-
-            // Use a deterministic ID so we don't create duplicates if run multiple times
-            const docId = `${user.uid}_${dateStr}_${s}`;
-            const docRef = doc(db, "attendance_records", docId);
-            batch.set(docRef, recordData);
-            count++;
-
-            if (count === 400) {
-              await batch.commit();
-              batch = writeBatch(db);
-              count = 0;
-            }
-          }
-        }
-        currentDate.setDate(currentDate.getDate() + 1);
-      }
-
-      if (count > 0) {
-        await batch.commit();
-      }
-
-      // Force reload of current date data
-      setDate(format(new Date(), "yyyy-MM-dd"));
-      setSuccess(true);
-      setTimeout(() => setSuccess(false), 3000);
-    } catch (error) {
-      console.error("Error generating mock data:", error);
-    } finally {
-      setIsGeneratingMock(false);
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
+    if (!user || !session) {
+      setErrorMessage("Vui lòng chọn buổi điểm danh (Trưa/Tối) trước khi lưu.");
+      return;
+    }
     setLoading(true);
     setSuccess(false);
     setErrorMessage(null);
@@ -325,71 +296,130 @@ export default function TeacherInput() {
   };
 
   return (
-    <div className="space-y-6 pb-24 relative max-w-5xl mx-auto">
-      {/* Control Panel */}
-      <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
-            <div>
-              <h2 className="text-2xl font-bold text-gray-800 tracking-tight">Nhập liệu điểm danh</h2>
-              <div className="flex items-center mt-1 text-sm text-gray-500">
-                  <User className="h-4 w-4 mr-1.5 text-indigo-500" />
-                  <span>Giáo viên: <span className="font-semibold text-gray-900">{user?.displayName || user?.email}</span></span>
-              </div>
+    <div className="space-y-6 pb-6 relative max-w-5xl mx-auto">
+      {/* Name and Gender Prompt Modal */}
+      {showNamePrompt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="p-6 border-b border-gray-100 bg-indigo-50/50">
+              <h3 className="text-lg font-bold text-indigo-900">Chào mừng bạn đến với hệ thống!</h3>
+              <p className="text-sm text-indigo-700 mt-1">Vui lòng cập nhật thông tin để tiếp tục.</p>
             </div>
-            {/* Hidden/Dev button for generating mock data */}
-            <div className="relative">
-                <button
+            <form onSubmit={handleUpdateName} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Họ và tên giáo viên <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={promptName}
+                  onChange={(e) => setPromptName(e.target.value)}
+                  placeholder="VD: Nguyễn Văn A"
+                  className="block w-full rounded-xl border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-3 bg-gray-50"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Giới tính <span className="text-red-500">*</span>
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
                     type="button"
-                    onClick={() => setShowMockConfirm(true)}
-                    disabled={isGeneratingMock}
-                    className="text-xs px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors flex items-center gap-1"
-                    title="Tạo dữ liệu mẫu từ 09/2025 đến nay"
-                >
-                    {isGeneratingMock ? (
-                        <><Loader2 className="h-3 w-3 animate-spin" /> Đang tạo...</>
-                    ) : (
-                        "Tạo dữ liệu mẫu (Test)"
+                    onClick={() => setPromptGender("male")}
+                    className={cn(
+                      "py-2 px-4 rounded-xl border text-sm font-medium transition-all",
+                      promptGender === "male"
+                        ? "border-indigo-500 bg-indigo-50 text-indigo-700 ring-1 ring-indigo-500"
+                        : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
                     )}
-                </button>
-                
-                {showMockConfirm && (
-                    <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-xl shadow-xl border border-gray-100 p-4 z-20 animate-in fade-in zoom-in-95 duration-200">
-                        <p className="text-sm text-gray-700 mb-3 font-medium">Bạn có chắc muốn tạo dữ liệu mẫu từ 09/2025 đến nay? Quá trình này có thể mất vài phút.</p>
-                        <div className="flex justify-end gap-2">
-                            <button 
-                                onClick={() => setShowMockConfirm(false)}
-                                className="px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-                            >
-                                Hủy
-                            </button>
-                            <button 
-                                onClick={generateMockData}
-                                className="px-3 py-1.5 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors"
-                            >
-                                Xác nhận
-                            </button>
-                        </div>
-                    </div>
+                  >
+                    Nam (Thầy)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPromptGender("female")}
+                    className={cn(
+                      "py-2 px-4 rounded-xl border text-sm font-medium transition-all",
+                      promptGender === "female"
+                        ? "border-pink-500 bg-pink-50 text-pink-700 ring-1 ring-pink-500"
+                        : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+                    )}
+                  >
+                    Nữ (Cô)
+                  </button>
+                </div>
+              </div>
+              <button
+                type="submit"
+                disabled={updatingName || !promptName.trim() || !promptGender}
+                className="w-full flex justify-center items-center py-3 px-4 border border-transparent rounded-xl shadow-sm text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 transition-all mt-6"
+              >
+                {updatingName ? (
+                  <><Loader2 className="animate-spin -ml-1 mr-2 h-5 w-5" /> Đang cập nhật...</>
+                ) : (
+                  "Cập nhật thông tin"
                 )}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Greeting Modal */}
+      {showGreeting && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in-95 duration-300 transform transition-all">
+            <div className="p-8 text-center">
+              <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-indigo-100 mb-6">
+                <Sun className="h-8 w-8 text-indigo-600" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">Chào mừng!</h3>
+              <p className="text-gray-600 text-base leading-relaxed">
+                {greetingMessage}
+              </p>
+              <button
+                onClick={() => setShowGreeting(false)}
+                className="mt-8 w-full inline-flex justify-center rounded-xl border border-transparent px-4 py-3 bg-indigo-600 text-base font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 sm:text-sm transition-colors"
+              >
+                Bắt đầu làm việc
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Control Panel */}
+      <div className="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-gray-100">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 sm:mb-6 gap-3 sm:gap-4">
+            <div>
+              <h2 className="text-lg sm:text-2xl font-bold text-gray-800 tracking-tight">
+                {getGreeting()}, <span className="text-indigo-600">{user?.photoURL === "female" ? "Cô" : user?.photoURL === "male" ? "Thầy" : "Thầy/Cô"} {user?.displayName || ""}</span>!
+              </h2>
+              <p className="text-[11px] sm:text-sm text-gray-500 mt-0.5 sm:mt-1 mb-2 sm:mb-3">Chúc {user?.photoURL === "female" ? "Cô" : user?.photoURL === "male" ? "Thầy" : "Thầy/Cô"} một ngày làm việc hiệu quả.</p>
+              <div className="flex items-center text-[11px] sm:text-sm text-gray-500 bg-gray-50 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg inline-flex border border-gray-100">
+                  <User className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5 text-indigo-500" />
+                  <span className="truncate max-w-[200px] sm:max-w-none">Tài khoản: <span className="font-semibold text-gray-900">{user?.email}</span></span>
+              </div>
             </div>
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="space-y-2">
-            <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-indigo-500" />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+          <div className="space-y-1.5 sm:space-y-2">
+            <label className="text-xs sm:text-sm font-semibold text-gray-700 flex items-center gap-1.5 sm:gap-2">
+              <Calendar className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-indigo-500" />
               Ngày điểm danh
             </label>
             <input
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              className="block w-full rounded-xl border-gray-200 bg-gray-50/50 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-3 transition-all hover:bg-white"
+              className="block w-full rounded-xl border-gray-200 bg-gray-50/50 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm p-2.5 sm:p-3 transition-all hover:bg-white"
             />
           </div>
-          <div className="space-y-2">
-            <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-              {session === 'noon' ? <Sun className="h-4 w-4 text-orange-500" /> : <Moon className="h-4 w-4 text-indigo-500" />}
+          <div className="space-y-1.5 sm:space-y-2">
+            <label className="text-xs sm:text-sm font-semibold text-gray-700 flex items-center gap-1.5 sm:gap-2">
+              {session === 'noon' ? <Sun className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-orange-500" /> : <Moon className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-indigo-500" />}
               Buổi
             </label>
             <div className="flex p-1 bg-gray-100 rounded-xl">
@@ -397,26 +427,26 @@ export default function TeacherInput() {
                 type="button"
                 onClick={() => setSession("noon")}
                 className={cn(
-                  "flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all duration-200 flex items-center justify-center gap-2",
+                  "flex-1 py-1.5 sm:py-2 px-3 sm:px-4 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 flex items-center justify-center gap-1.5 sm:gap-2",
                   session === "noon" 
                     ? "bg-white text-orange-600 shadow-sm" 
                     : "text-gray-500 hover:text-gray-700"
                 )}
               >
-                <Sun className="h-4 w-4" />
+                <Sun className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 Buổi Trưa
               </button>
               <button
                 type="button"
                 onClick={() => setSession("evening")}
                 className={cn(
-                  "flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all duration-200 flex items-center justify-center gap-2",
+                  "flex-1 py-1.5 sm:py-2 px-3 sm:px-4 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 flex items-center justify-center gap-1.5 sm:gap-2",
                   session === "evening" 
                     ? "bg-white text-indigo-600 shadow-sm" 
                     : "text-gray-500 hover:text-gray-700"
                 )}
               >
-                <Moon className="h-4 w-4" />
+                <Moon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 Buổi Tối
               </button>
             </div>
@@ -434,18 +464,45 @@ export default function TeacherInput() {
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="overflow-x-auto">
+      {!session ? (
+        <div className="bg-white rounded-2xl shadow-sm border border-indigo-100 p-8 text-center">
+          <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-indigo-50 mb-4">
+            <Calendar className="h-8 w-8 text-indigo-500" />
+          </div>
+          <h3 className="text-lg font-bold text-gray-900 mb-2">Chưa chọn buổi điểm danh</h3>
+          <p className="text-gray-500 text-sm max-w-md mx-auto mb-6">
+            Vui lòng chọn <span className="font-semibold text-orange-600">Buổi Trưa</span> hoặc <span className="font-semibold text-indigo-600">Buổi Tối</span> ở bảng điều khiển phía trên để bắt đầu nhập dữ liệu điểm danh.
+          </p>
+          <div className="flex justify-center gap-4">
+            <button
+              onClick={() => setSession("noon")}
+              className="flex items-center gap-2 px-6 py-2.5 bg-orange-50 text-orange-600 rounded-xl font-medium hover:bg-orange-100 transition-colors border border-orange-200"
+            >
+              <Sun className="h-4 w-4" />
+              Chọn Buổi Trưa
+            </button>
+            <button
+              onClick={() => setSession("evening")}
+              className="flex items-center gap-2 px-6 py-2.5 bg-indigo-50 text-indigo-600 rounded-xl font-medium hover:bg-indigo-100 transition-colors border border-indigo-200"
+            >
+              <Moon className="h-4 w-4" />
+              Chọn Buổi Tối
+            </button>
+          </div>
+        </div>
+      ) : (
+        <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-sm border border-gray-100 relative">
+          <div className="overflow-x-auto rounded-t-2xl">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50/80">
               <tr>
-                <th scope="col" className="px-4 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider w-20 text-center">
+                <th scope="col" className="px-2 sm:px-4 py-3 sm:py-4 text-center text-[10px] sm:text-xs font-bold text-gray-500 uppercase tracking-wider w-12 sm:w-20">
                   Phòng
                 </th>
-                <th scope="col" className="px-4 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider w-48 text-center">
+                <th scope="col" className="px-2 sm:px-4 py-3 sm:py-4 text-center text-[10px] sm:text-xs font-bold text-gray-500 uppercase tracking-wider w-24 sm:w-48">
                   Sĩ số (Hiện diện/Tổng)
                 </th>
-                <th scope="col" className="px-4 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">
+                <th scope="col" className="px-2 sm:px-4 py-3 sm:py-4 text-left text-[10px] sm:text-xs font-bold text-gray-500 uppercase tracking-wider">
                   Học sinh vắng & Lý do
                 </th>
               </tr>
@@ -453,27 +510,27 @@ export default function TeacherInput() {
             <tbody className="bg-white divide-y divide-gray-100">
               {rooms.map((room, index) => (
                 <tr key={room.roomNumber} className="hover:bg-gray-50/80 transition-colors group">
-                  <td className="px-4 py-3 whitespace-nowrap text-sm font-bold text-gray-900 text-center bg-gray-50/30 group-hover:bg-transparent transition-colors">
+                  <td className="px-2 sm:px-4 py-2 sm:py-3 whitespace-nowrap text-xs sm:text-sm font-bold text-gray-900 text-center bg-gray-50/30 group-hover:bg-transparent transition-colors">
                     {room.roomNumber}
                   </td>
-                  <td className="px-4 py-3 whitespace-nowrap">
+                  <td className="px-2 sm:px-4 py-2 sm:py-3 whitespace-nowrap">
                     <input
                       type="text"
                       value={room.totalStudents}
                       onChange={(e) => handleRoomChange(index, "totalStudents", e.target.value)}
-                      className="block w-full rounded-xl border-gray-200 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-lg font-semibold p-2.5 border text-center transition-all hover:border-gray-300 bg-white"
+                      className="block w-full rounded-xl border-gray-200 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm sm:text-lg font-semibold p-2 sm:p-2.5 border text-center transition-all hover:border-gray-300 bg-white"
                       placeholder="VD: 8/10"
                     />
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-2 sm:px-4 py-2 sm:py-3">
                     <div 
                         className={cn(
-                          "relative flex items-center w-full rounded-xl border shadow-sm bg-white p-2.5 min-h-[46px] cursor-pointer transition-all duration-200 group-hover:border-indigo-200",
+                          "relative flex items-center w-full rounded-xl border shadow-sm bg-white p-2 sm:p-2.5 min-h-[40px] sm:min-h-[46px] cursor-pointer transition-all duration-200 group-hover:border-indigo-200",
                           room.absentDetails ? "border-indigo-100 bg-indigo-50/30" : "border-gray-200 hover:bg-gray-50"
                         )}
                         onClick={() => openAbsentModal(index)}
                     >
-                        <span className={cn("text-sm flex-1 truncate", !room.absentDetails && "text-gray-400 italic")}>
+                        <span className={cn("text-xs sm:text-sm flex-1 truncate", !room.absentDetails && "text-gray-400 italic")}>
                             {room.absentDetails || "Chạm để nhập danh sách vắng..."}
                         </span>
                         <div className="bg-gray-100 p-1.5 rounded-lg group-hover:bg-indigo-100 transition-colors">
@@ -487,16 +544,16 @@ export default function TeacherInput() {
           </table>
         </div>
         
-        <div className="px-4 py-4 bg-white/80 backdrop-blur-md border-t border-gray-200 fixed bottom-16 left-0 right-0 z-10 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] md:absolute md:bottom-0 md:shadow-none md:border-t-0 md:bg-gray-50">
-          <div className="max-w-7xl mx-auto flex justify-end px-4 sm:px-6 lg:px-8 md:px-0">
+        <div className="sticky bottom-16 md:bottom-0 px-4 py-4 bg-white/90 backdrop-blur-md border-t border-gray-200 z-10 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] rounded-b-2xl">
+          <div className="max-w-7xl mx-auto flex justify-end">
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || !session}
               className={cn(
                 "inline-flex justify-center items-center py-3 px-6 border border-transparent shadow-lg text-sm font-bold rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 w-full sm:w-auto transition-all duration-200 transform active:scale-95",
                 success 
                   ? "bg-green-600 hover:bg-green-700 shadow-green-500/30" 
-                  : "bg-indigo-600 hover:bg-indigo-700 shadow-indigo-500/30 hover:-translate-y-0.5"
+                  : "bg-indigo-600 hover:bg-indigo-700 shadow-indigo-500/30 hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0"
               )}
             >
               {loading ? (
@@ -516,6 +573,7 @@ export default function TeacherInput() {
           </div>
         </div>
       </form>
+      )}
 
       {/* Modal for Absent Students */}
       {isModalOpen && (

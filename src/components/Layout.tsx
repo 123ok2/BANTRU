@@ -10,7 +10,7 @@ export default function Layout() {
 
   const navItems = [
     { name: "Công khai", path: "/", icon: LayoutDashboard },
-    ...(user ? [{ name: "Nhập liệu", path: "/teacher", icon: FileSpreadsheet }] : []),
+    ...(user ? [{ name: "Điểm danh", path: "/teacher", icon: FileSpreadsheet }] : []),
   ];
 
   return (

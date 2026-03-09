@@ -405,71 +405,73 @@ export default function PublicDashboard() {
                 <p className="text-sm">Đang tải dữ liệu...</p>
             </div>
         ) : (
-            <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50/80">
-                <tr>
-                    <th scope="col" className="px-3 py-3 text-center text-xs font-bold text-gray-500 uppercase tracking-wider w-16 border-r border-gray-100">
-                    Phòng
-                    </th>
-                    <th scope="col" className="px-3 py-3 text-center text-xs font-bold text-gray-500 uppercase tracking-wider w-24 border-r border-gray-100">
-                    Sĩ số
-                    </th>
-                    <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">
-                    Học sinh vắng & Lý do
-                    </th>
-                </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-100">
-                {rooms.map((room, index) => (
-                    <tr key={room.roomNumber} className="hover:bg-gray-50/50 transition-colors group">
-                    <td className="px-3 py-3 whitespace-nowrap text-sm font-bold text-gray-900 text-center bg-gray-50/30 group-hover:bg-transparent transition-colors align-top border-r border-gray-100">
-                        <div className="mt-1">{room.roomNumber}</div>
-                    </td>
-                    <td className="px-3 py-3 whitespace-nowrap text-center align-top border-r border-gray-100">
-                        <div className={cn(
-                          "inline-flex items-center justify-center px-2.5 py-0.5 rounded-md font-bold text-sm mt-1",
-                          room.totalStudents ? "bg-indigo-50 text-indigo-700 border border-indigo-100" : "text-gray-400"
-                        )}>
-                          {room.totalStudents || "-"}
-                        </div>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-600 align-top">
-                        {room.absentDetails ? (
-                          <div className="flex flex-wrap gap-1.5">
-                            {room.absentDetails.split(';').map((detail, idx) => (
-                              <span key={idx} className="inline-flex items-center px-2 py-1 rounded-md bg-red-50 text-red-700 border border-red-100 text-xs font-medium leading-tight">
-                                {detail.trim()}
-                              </span>
-                            ))}
-                          </div>
-                        ) : (
-                          <span className="text-gray-300 italic text-xs mt-1.5 block">Không có ghi chú</span>
-                        )}
-                    </td>
+            <div className="overflow-x-auto -mx-4 sm:mx-0">
+              <div className="inline-block min-w-full align-middle">
+                <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50/80">
+                    <tr>
+                        <th scope="col" className="px-2 sm:px-3 py-3 text-center text-[10px] sm:text-xs font-bold text-gray-500 uppercase tracking-wider w-12 sm:w-16 border-r border-gray-100">
+                        Phòng
+                        </th>
+                        <th scope="col" className="px-2 sm:px-3 py-3 text-center text-[10px] sm:text-xs font-bold text-gray-500 uppercase tracking-wider w-16 sm:w-24 border-r border-gray-100">
+                        Sĩ số
+                        </th>
+                        <th scope="col" className="px-2 sm:px-4 py-3 text-left text-[10px] sm:text-xs font-bold text-gray-500 uppercase tracking-wider">
+                        Học sinh vắng & Lý do
+                        </th>
                     </tr>
-                ))}
-                <tr className="bg-gray-50 font-bold border-t-2 border-gray-100">
-                    <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900 text-center uppercase tracking-wider border-r border-gray-200">
-                        Tổng
-                    </td>
-                    <td className="px-3 py-3 whitespace-nowrap text-center border-r border-gray-200">
-                        {(() => {
-                            const summary = rooms.reduce((acc, curr) => {
-                                const { present, total } = parseStudentCount(curr.totalStudents);
-                                return { present: acc.present + present, total: acc.total + total };
-                            }, { present: 0, total: 0 });
-                            return (
-                              <span className="inline-flex items-center justify-center px-3 py-1 rounded-md bg-gray-900 text-white shadow-sm text-xs">
-                                {summary.present}/{summary.total}
-                              </span>
-                            );
-                        })()}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-500"></td>
-                </tr>
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-100">
+                    {rooms.map((room, index) => (
+                        <tr key={room.roomNumber} className="hover:bg-gray-50/50 transition-colors group">
+                        <td className="px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap text-xs sm:text-sm font-bold text-gray-900 text-center bg-gray-50/30 group-hover:bg-transparent transition-colors align-top border-r border-gray-100">
+                            <div className="mt-1">{room.roomNumber}</div>
+                        </td>
+                        <td className="px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap text-center align-top border-r border-gray-100">
+                            <div className={cn(
+                              "inline-flex items-center justify-center px-1.5 sm:px-2.5 py-0.5 rounded-md font-bold text-xs sm:text-sm mt-1",
+                              room.totalStudents ? "bg-indigo-50 text-indigo-700 border border-indigo-100" : "text-gray-400"
+                            )}>
+                              {room.totalStudents || "-"}
+                            </div>
+                        </td>
+                        <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm text-gray-600 align-top">
+                            {room.absentDetails ? (
+                              <div className="flex flex-wrap gap-1 sm:gap-1.5">
+                                {room.absentDetails.split(';').map((detail, idx) => (
+                                  <span key={idx} className="inline-flex items-center px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-md bg-red-50 text-red-700 border border-red-100 text-[10px] sm:text-xs font-medium leading-tight">
+                                    {detail.trim()}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-gray-300 italic text-[10px] sm:text-xs mt-1.5 block">Không có ghi chú</span>
+                            )}
+                        </td>
+                        </tr>
+                    ))}
+                    <tr className="bg-gray-50 font-bold border-t-2 border-gray-100">
+                        <td className="px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap text-xs sm:text-sm text-gray-900 text-center uppercase tracking-wider border-r border-gray-200">
+                            Tổng
+                        </td>
+                        <td className="px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap text-center border-r border-gray-200">
+                            {(() => {
+                                const summary = rooms.reduce((acc, curr) => {
+                                    const { present, total } = parseStudentCount(curr.totalStudents);
+                                    return { present: acc.present + present, total: acc.total + total };
+                                }, { present: 0, total: 0 });
+                                return (
+                                  <span className="inline-flex items-center justify-center px-2 sm:px-3 py-1 rounded-md bg-gray-900 text-white shadow-sm text-[10px] sm:text-xs">
+                                    {summary.present}/{summary.total}
+                                  </span>
+                                );
+                            })()}
+                        </td>
+                        <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm text-gray-500"></td>
+                    </tr>
+                    </tbody>
+                </table>
+              </div>
             </div>
         )}
       </div>
