@@ -148,8 +148,19 @@ export default function TeacherInput() {
 
   const saveModalData = () => {
     if (currentRoomIndex !== null) {
+      let finalAbsentList = [...tempAbsentList];
+      
+      // Automatically add pending input if user forgot to click "Thêm"
+      if (newName.trim()) {
+          finalAbsentList.push({
+              name: newName.trim(),
+              className: newClassName.trim(),
+              reason: newReason.trim()
+          });
+      }
+
       // Serialize back to string: "Name - Class (Reason); Name (Reason)"
-      const detailsString = tempAbsentList
+      const detailsString = finalAbsentList
         .map(s => {
             let str = s.name;
             if (s.className) str += ` - ${s.className}`;
@@ -161,6 +172,105 @@ export default function TeacherInput() {
       handleRoomChange(currentRoomIndex, "absentDetails", detailsString);
     }
     setIsModalOpen(false);
+  };
+
+  const generateMockData = async () => {
+    if (!user) return;
+    if (!window.confirm("Bạn có chắc muốn tạo dữ liệu mẫu từ 09/2025 đến nay? Quá trình này có thể mất vài phút.")) return;
+    
+    setLoading(true);
+    try {
+      const startDate = new Date("2025-09-01");
+      const endDate = new Date(); // Today
+      
+      const firstNames = ["Nguyễn", "Trần", "Lê", "Phạm", "Hoàng", "Huỳnh", "Phan", "Vũ", "Võ", "Đặng"];
+      const middleNames = ["Thị", "Văn", "Hữu", "Minh", "Ngọc", "Thanh", "Đức", "Gia", "Bảo"];
+      const lastNames = ["Anh", "Bình", "Cường", "Dung", "Duy", "Hải", "Hiếu", "Hòa", "Huy", "Khang", "Linh", "Mai", "Nam", "Nga", "Phúc", "Quân", "Trang", "Tuấn", "Vinh", "Yến"];
+      const classes = ["6A", "6B", "6C", "7A", "7B", "7C", "8A", "8B", "8C", "9A", "9B", "9C"];
+      const reasons = ["Ốm", "Có phép", "Không phép", "Về quê", "Đi khám bệnh"];
+
+      const getRandomName = () => {
+        return `${firstNames[Math.floor(Math.random() * firstNames.length)]} ${middleNames[Math.floor(Math.random() * middleNames.length)]} ${lastNames[Math.floor(Math.random() * lastNames.length)]}`;
+      };
+
+      let currentDate = new Date(startDate);
+      
+      const { writeBatch } = await import("firebase/firestore");
+      let batch = writeBatch(db);
+      let count = 0;
+
+      while (currentDate <= endDate) {
+        // Skip weekends
+        const day = currentDate.getDay();
+        if (day !== 0 && day !== 6) {
+          const dateStr = format(currentDate, "yyyy-MM-dd");
+          
+          for (const s of ["noon", "evening"] as const) {
+            const roomsData: RoomData[] = [];
+            
+            for (let i = 1; i <= ROOM_COUNT; i++) {
+              const total = Math.floor(Math.random() * 10) + 30; // 30-39
+              const absentCount = Math.random() > 0.6 ? 0 : Math.floor(Math.random() * 3) + 1; // 0 or 1-3
+              const present = total - absentCount;
+              
+              let absentDetails = "";
+              if (absentCount > 0) {
+                const absentList = [];
+                for (let j = 0; j < absentCount; j++) {
+                  const name = getRandomName();
+                  const className = classes[Math.floor(Math.random() * classes.length)];
+                  const reason = reasons[Math.floor(Math.random() * reasons.length)];
+                  absentList.push(`${name} - ${className} (${reason})`);
+                }
+                absentDetails = absentList.join("; ");
+              }
+
+              roomsData.push({
+                roomNumber: i,
+                totalStudents: `${present}/${total}`,
+                absentDetails: absentDetails
+              });
+            }
+
+            const recordData = {
+              date: dateStr,
+              session: s,
+              teacherId: user.uid,
+              teacherEmail: user.email,
+              teacherName: user.displayName || user.email,
+              rooms: roomsData,
+              updatedAt: Timestamp.now(),
+            };
+
+            // Use a deterministic ID so we don't create duplicates if run multiple times
+            const docId = `${user.uid}_${dateStr}_${s}`;
+            const docRef = doc(db, "attendance_records", docId);
+            batch.set(docRef, recordData);
+            count++;
+
+            if (count === 400) {
+              await batch.commit();
+              batch = writeBatch(db);
+              count = 0;
+            }
+          }
+        }
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+
+      if (count > 0) {
+        await batch.commit();
+      }
+
+      alert("Tạo dữ liệu mẫu thành công!");
+      // Force reload of current date data
+      setDate(format(new Date(), "yyyy-MM-dd"));
+    } catch (error) {
+      console.error("Error generating mock data:", error);
+      alert("Lỗi khi tạo dữ liệu mẫu.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -218,6 +328,16 @@ export default function TeacherInput() {
                   <span>Giáo viên: <span className="font-semibold text-gray-900">{user?.displayName || user?.email}</span></span>
               </div>
             </div>
+            {/* Hidden/Dev button for generating mock data */}
+            <button
+                type="button"
+                onClick={generateMockData}
+                disabled={loading}
+                className="text-xs px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors"
+                title="Tạo dữ liệu mẫu từ 09/2025 đến nay"
+            >
+                Tạo dữ liệu mẫu (Test)
+            </button>
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
