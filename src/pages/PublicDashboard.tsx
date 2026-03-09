@@ -41,15 +41,18 @@ export default function PublicDashboard() {
   const [session, setSession] = useState<"noon" | "evening">("noon");
   const [rooms, setRooms] = useState<RoomData[]>([]);
   const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Statistics State
   const [statsStartDate, setStatsStartDate] = useState(format(subDays(new Date(), 30), "yyyy-MM-dd"));
   const [statsEndDate, setStatsEndDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [topStudents, setTopStudents] = useState<StudentStat[]>([]);
   const [statsLoading, setStatsLoading] = useState(false);
+  const [statsErrorMessage, setStatsErrorMessage] = useState<string | null>(null);
 
   const fetchData = async () => {
     setLoading(true);
+    setErrorMessage(null);
     try {
       const q = query(
         collection(db, "attendance_records"),
@@ -88,8 +91,9 @@ export default function PublicDashboard() {
       });
 
       setRooms(mergedRooms);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error fetching data:", error);
+      setErrorMessage(error.message || "Lỗi khi tải dữ liệu. Vui lòng kiểm tra kết nối mạng hoặc quyền truy cập.");
     } finally {
       setLoading(false);
     }
@@ -97,6 +101,7 @@ export default function PublicDashboard() {
 
   const fetchTopAbsentStudents = async () => {
     setStatsLoading(true);
+    setStatsErrorMessage(null);
     try {
       const q = query(
         collection(db, "attendance_records"),
@@ -138,8 +143,9 @@ export default function PublicDashboard() {
         .slice(0, 10);
 
       setTopStudents(sortedStudents);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error fetching statistics:", error);
+      setStatsErrorMessage(error.message || "Lỗi khi tải dữ liệu thống kê.");
     } finally {
       setStatsLoading(false);
     }
@@ -342,6 +348,18 @@ export default function PublicDashboard() {
       </div>
 
       {/* Main Data Table */}
+      {errorMessage && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl flex items-start gap-3">
+          <div className="mt-0.5 flex-shrink-0 text-red-500">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+          </div>
+          <div>
+            <h3 className="font-semibold text-sm">Đã xảy ra lỗi</h3>
+            <p className="text-sm mt-1">{errorMessage}</p>
+          </div>
+        </div>
+      )}
+      
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="p-4 border-b border-gray-100 flex flex-col sm:flex-row justify-between items-start sm:items-center bg-gray-50/50 gap-3">
             <div className="flex flex-col gap-1.5 w-full sm:w-auto">

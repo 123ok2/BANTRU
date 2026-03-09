@@ -33,6 +33,7 @@ export default function TeacherInput() {
   );
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -47,6 +48,7 @@ export default function TeacherInput() {
     const loadData = async () => {
       if (!user) return;
       setLoading(true);
+      setErrorMessage(null);
       try {
         const q = query(
           collection(db, "attendance_records"),
@@ -72,8 +74,9 @@ export default function TeacherInput() {
             absentDetails: "",
           })));
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error("Error loading data:", error);
+        setErrorMessage(error.message || "Lỗi khi tải dữ liệu. Vui lòng kiểm tra kết nối mạng hoặc quyền truy cập.");
       } finally {
         setLoading(false);
       }
@@ -174,11 +177,15 @@ export default function TeacherInput() {
     setIsModalOpen(false);
   };
 
+  const [isGeneratingMock, setIsGeneratingMock] = useState(false);
+  const [showMockConfirm, setShowMockConfirm] = useState(false);
+
   const generateMockData = async () => {
     if (!user) return;
-    if (!window.confirm("Bạn có chắc muốn tạo dữ liệu mẫu từ 09/2025 đến nay? Quá trình này có thể mất vài phút.")) return;
     
-    setLoading(true);
+    setIsGeneratingMock(true);
+    setShowMockConfirm(false);
+    
     try {
       const startDate = new Date("2025-09-01");
       const endDate = new Date(); // Today
@@ -262,14 +269,14 @@ export default function TeacherInput() {
         await batch.commit();
       }
 
-      alert("Tạo dữ liệu mẫu thành công!");
       // Force reload of current date data
       setDate(format(new Date(), "yyyy-MM-dd"));
+      setSuccess(true);
+      setTimeout(() => setSuccess(false), 3000);
     } catch (error) {
       console.error("Error generating mock data:", error);
-      alert("Lỗi khi tạo dữ liệu mẫu.");
     } finally {
-      setLoading(false);
+      setIsGeneratingMock(false);
     }
   };
 
@@ -278,6 +285,7 @@ export default function TeacherInput() {
     if (!user) return;
     setLoading(true);
     setSuccess(false);
+    setErrorMessage(null);
 
     try {
       // Check if record exists to update or create new
@@ -308,9 +316,9 @@ export default function TeacherInput() {
       
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error saving document: ", error);
-      alert("Lỗi khi lưu dữ liệu. Vui lòng thử lại.");
+      setErrorMessage(error.message || "Lỗi khi lưu dữ liệu. Vui lòng thử lại.");
     } finally {
       setLoading(false);
     }
@@ -329,15 +337,41 @@ export default function TeacherInput() {
               </div>
             </div>
             {/* Hidden/Dev button for generating mock data */}
-            <button
-                type="button"
-                onClick={generateMockData}
-                disabled={loading}
-                className="text-xs px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors"
-                title="Tạo dữ liệu mẫu từ 09/2025 đến nay"
-            >
-                Tạo dữ liệu mẫu (Test)
-            </button>
+            <div className="relative">
+                <button
+                    type="button"
+                    onClick={() => setShowMockConfirm(true)}
+                    disabled={isGeneratingMock}
+                    className="text-xs px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors flex items-center gap-1"
+                    title="Tạo dữ liệu mẫu từ 09/2025 đến nay"
+                >
+                    {isGeneratingMock ? (
+                        <><Loader2 className="h-3 w-3 animate-spin" /> Đang tạo...</>
+                    ) : (
+                        "Tạo dữ liệu mẫu (Test)"
+                    )}
+                </button>
+                
+                {showMockConfirm && (
+                    <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-xl shadow-xl border border-gray-100 p-4 z-20 animate-in fade-in zoom-in-95 duration-200">
+                        <p className="text-sm text-gray-700 mb-3 font-medium">Bạn có chắc muốn tạo dữ liệu mẫu từ 09/2025 đến nay? Quá trình này có thể mất vài phút.</p>
+                        <div className="flex justify-end gap-2">
+                            <button 
+                                onClick={() => setShowMockConfirm(false)}
+                                className="px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                            >
+                                Hủy
+                            </button>
+                            <button 
+                                onClick={generateMockData}
+                                className="px-3 py-1.5 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors"
+                            >
+                                Xác nhận
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </div>
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -389,6 +423,16 @@ export default function TeacherInput() {
           </div>
         </div>
       </div>
+
+      {errorMessage && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl flex items-start gap-3">
+          <X className="h-5 w-5 text-red-500 mt-0.5 flex-shrink-0" />
+          <div>
+            <h3 className="font-semibold text-sm">Đã xảy ra lỗi</h3>
+            <p className="text-sm mt-1">{errorMessage}</p>
+          </div>
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="overflow-x-auto">
