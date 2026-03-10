@@ -54,13 +54,17 @@ export default class ErrorBoundary extends React.Component<Props, State> {
                 Thử lại
               </button>
             </div>
-            {process.env.NODE_ENV === "development" && (
-              <div className="mt-8 p-4 bg-gray-50 rounded-lg text-left overflow-auto max-h-40">
-                <p className="text-xs font-mono text-red-700 whitespace-pre-wrap">
-                  {this.state.error?.toString()}
+            
+            <details className="mt-8 text-left">
+              <summary className="text-xs text-gray-400 cursor-pointer hover:text-gray-600 transition-colors">
+                Xem chi tiết lỗi (dành cho kỹ thuật)
+              </summary>
+              <div className="mt-2 p-4 bg-gray-50 rounded-lg overflow-auto max-h-40 border border-gray-200">
+                <p className="text-[10px] font-mono text-red-700 whitespace-pre-wrap">
+                  {this.state.error?.stack || this.state.error?.toString()}
                 </p>
               </div>
-            )}
+            </details>
           </div>
         </div>
       );

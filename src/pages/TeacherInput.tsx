@@ -130,62 +130,68 @@ export default function TeacherInput() {
     );
 
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      setLoading(false);
-      
-      if (!querySnapshot.empty) {
-        // Initialize empty structure
-        const mergedRooms: RoomData[] = Array.from({ length: ROOM_COUNT }, (_, i) => ({
-          roomNumber: i + 1,
-          totalStudents: "",
-          absentDetails: "",
-        }));
-
-        // Merge data from all documents
-        querySnapshot.forEach((doc) => {
-          const data = doc.data();
-          if (!data || !Array.isArray(data.rooms)) return;
-          
-          const docRooms = data.rooms as RoomData[];
-          
-          docRooms.forEach((r) => {
-            if (r && typeof r === 'object' && r.roomNumber >= 1 && r.roomNumber <= ROOM_COUNT) {
-              if (r.totalStudents || r.absentDetails) {
-                  mergedRooms[r.roomNumber - 1] = {
-                    ...r,
-                    totalStudents: String(r.totalStudents || "")
-                  };
-              }
-            }
-          });
-        });
+      try {
+        setLoading(false);
         
-        // Only update local state for rooms that haven't been edited locally
-        setRooms(prevRooms => {
-          const newRooms = [...prevRooms];
-          const currentDirty = dirtyRoomsRef.current;
-          mergedRooms.forEach((room, index) => {
-            if (!currentDirty.has(index)) {
-              newRooms[index] = room;
-            }
-          });
-          return newRooms;
-        });
-      } else {
-        // Reset if no data found, but keep dirty rooms
-        setRooms(prevRooms => {
-          const newRooms = Array.from({ length: ROOM_COUNT }, (_, i) => ({
+        if (!querySnapshot.empty) {
+          // Initialize empty structure
+          const mergedRooms: RoomData[] = Array.from({ length: ROOM_COUNT }, (_, i) => ({
             roomNumber: i + 1,
             totalStudents: "",
             absentDetails: "",
           }));
-          const currentDirty = dirtyRoomsRef.current;
-          currentDirty.forEach(index => {
-            if (prevRooms[index]) {
-              newRooms[index] = prevRooms[index];
-            }
+
+          // Merge data from all documents
+          querySnapshot.forEach((doc) => {
+            const data = doc.data();
+            if (!data || !Array.isArray(data.rooms)) return;
+            
+            const docRooms = data.rooms as RoomData[];
+            
+            docRooms.forEach((r) => {
+              if (r && typeof r === 'object' && r.roomNumber >= 1 && r.roomNumber <= ROOM_COUNT) {
+                if (r.totalStudents || r.absentDetails) {
+                    mergedRooms[r.roomNumber - 1] = {
+                      ...r,
+                      totalStudents: String(r.totalStudents || "")
+                    };
+                }
+              }
+            });
           });
-          return newRooms;
-        });
+          
+          // Only update local state for rooms that haven't been edited locally
+          setRooms(prevRooms => {
+            if (!Array.isArray(prevRooms)) return prevRooms;
+            const newRooms = [...prevRooms];
+            const currentDirty = dirtyRoomsRef.current;
+            mergedRooms.forEach((room, index) => {
+              if (index >= 0 && index < newRooms.length && !currentDirty.has(index)) {
+                newRooms[index] = room;
+              }
+            });
+            return newRooms;
+          });
+        } else {
+          // Reset if no data found, but keep dirty rooms
+          setRooms(prevRooms => {
+            const newRooms = Array.from({ length: ROOM_COUNT }, (_, i) => ({
+              roomNumber: i + 1,
+              totalStudents: "",
+              absentDetails: "",
+            }));
+            const currentDirty = dirtyRoomsRef.current;
+            currentDirty.forEach(index => {
+              if (prevRooms && index >= 0 && index < newRooms.length && prevRooms[index]) {
+                newRooms[index] = prevRooms[index];
+              }
+            });
+            return newRooms;
+          });
+        }
+      } catch (err) {
+        console.error("Error processing snapshot:", err);
+        setErrorMessage("Lỗi xử lý dữ liệu từ máy chủ.");
       }
     }, (error: any) => {
       console.error("Error loading data:", error);
@@ -212,15 +218,16 @@ export default function TeacherInput() {
 
   // Modal Handlers
   const openAbsentModal = (index: number) => {
+    if (!rooms[index]) return;
     setCurrentRoomIndex(index);
     const details = rooms[index].absentDetails;
     const parsedList: AbsentStudent[] = [];
     
     if (details) {
       // Parse existing string: "Name - Class (Reason); Name (Reason)"
-      const parts = details.split(';');
+      const parts = String(details).split(';');
       parts.forEach(part => {
-        let name = part.trim();
+        let name = String(part).trim();
         let className = "";
         let reason = "";
 
@@ -328,13 +335,14 @@ export default function TeacherInput() {
 
         querySnapshot.forEach((doc) => {
           const data = doc.data();
-          const docRooms = data.rooms as RoomData[] || [];
+          if (!data || !Array.isArray(data.rooms)) return;
+          const docRooms = data.rooms as RoomData[];
           docRooms.forEach((r) => {
-            if (r.roomNumber >= 1 && r.roomNumber <= ROOM_COUNT) {
+            if (r && typeof r === 'object' && typeof r.roomNumber === 'number' && r.roomNumber >= 1 && r.roomNumber <= ROOM_COUNT) {
               if (r.totalStudents || r.absentDetails) {
                   mergedRooms[r.roomNumber - 1] = {
                     ...r,
-                    totalStudents: String(r.totalStudents)
+                    totalStudents: String(r.totalStudents || "")
                   };
               }
             }

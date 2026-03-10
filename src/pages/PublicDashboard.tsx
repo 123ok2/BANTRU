@@ -20,20 +20,19 @@ interface StudentStat {
 
 const ROOM_COUNT = 18;
 
-const parseStudentCount = (val: string | number) => {
-  const str = String(val).trim();
+const parseStudentCount = (val: any) => {
+  const str = String(val || "").trim();
   if (!str) return { present: 0, total: 0 };
   
   if (str.includes('/')) {
-    const [present, total] = str.split('/').map(s => Number(s.trim()));
-    return { present: present || 0, total: total || 0 };
+    const parts = str.split('/');
+    const present = Number(String(parts[0] || "").trim());
+    const total = Number(String(parts[1] || "").trim());
+    return { present: isNaN(present) ? 0 : present, total: isNaN(total) ? 0 : total };
   }
   
   const num = Number(str);
-  // If it's just a number, we assume it's the present count. 
-  // For total, it's ambiguous, but let's assume it's also the total (full attendance) 
-  // unless we have a better way to know the class size.
-  return { present: num || 0, total: num || 0 }; 
+  return { present: isNaN(num) ? 0 : num, total: isNaN(num) ? 0 : num }; 
 };
 
 export default function PublicDashboard() {
@@ -164,8 +163,13 @@ export default function PublicDashboard() {
   }, []);
 
   const exportToExcel = () => {
-    // 1. Prepare Data
-    const schoolName = "TRƯỜNG PTDTBT THCS THU CÚC";
+    try {
+      if (!rooms || rooms.length === 0) {
+        alert("Không có dữ liệu để xuất.");
+        return;
+      }
+      // 1. Prepare Data
+      const schoolName = "TRƯỜNG PTDTBT THCS THU CÚC";
     const reportTitle = "BÁO CÁO ĐIỂM DANH BÁN TRÚ";
     const sessionText = session === "noon" ? "Buổi Trưa" : "Buổi Tối";
     // Format date to dd/MM/yyyy
@@ -302,6 +306,10 @@ export default function PublicDashboard() {
     
     const fileName = `DiemDanh_${date}_${session === "noon" ? "Trua" : "Toi"}.xlsx`;
     XLSX.writeFile(wb, fileName);
+    } catch (error) {
+      console.error("Excel export error:", error);
+      alert("Có lỗi xảy ra khi xuất file Excel. Vui lòng thử lại.");
+    }
   };
 
   return (
