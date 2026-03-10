@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { db } from "../firebase";
 import { collection, addDoc, query, where, getDocs, Timestamp, doc, setDoc, onSnapshot } from "firebase/firestore";
@@ -36,6 +36,7 @@ export default function TeacherInput() {
   const [success, setSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [dirtyRooms, setDirtyRooms] = useState<Set<number>>(new Set());
+  const dirtyRoomsRef = useRef<Set<number>>(new Set());
 
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -142,14 +143,16 @@ export default function TeacherInput() {
         // Merge data from all documents
         querySnapshot.forEach((doc) => {
           const data = doc.data();
-          const docRooms = data.rooms as RoomData[] || [];
+          if (!data || !Array.isArray(data.rooms)) return;
+          
+          const docRooms = data.rooms as RoomData[];
           
           docRooms.forEach((r) => {
-            if (r.roomNumber >= 1 && r.roomNumber <= ROOM_COUNT) {
+            if (r && typeof r === 'object' && r.roomNumber >= 1 && r.roomNumber <= ROOM_COUNT) {
               if (r.totalStudents || r.absentDetails) {
                   mergedRooms[r.roomNumber - 1] = {
                     ...r,
-                    totalStudents: String(r.totalStudents)
+                    totalStudents: String(r.totalStudents || "")
                   };
               }
             }
@@ -159,8 +162,9 @@ export default function TeacherInput() {
         // Only update local state for rooms that haven't been edited locally
         setRooms(prevRooms => {
           const newRooms = [...prevRooms];
+          const currentDirty = dirtyRoomsRef.current;
           mergedRooms.forEach((room, index) => {
-            if (!dirtyRooms.has(index)) {
+            if (!currentDirty.has(index)) {
               newRooms[index] = room;
             }
           });
@@ -174,8 +178,11 @@ export default function TeacherInput() {
             totalStudents: "",
             absentDetails: "",
           }));
-          dirtyRooms.forEach(index => {
-            newRooms[index] = prevRooms[index];
+          const currentDirty = dirtyRoomsRef.current;
+          currentDirty.forEach(index => {
+            if (prevRooms[index]) {
+              newRooms[index] = prevRooms[index];
+            }
           });
           return newRooms;
         });
@@ -187,7 +194,7 @@ export default function TeacherInput() {
     });
 
     return () => unsubscribe();
-  }, [date, session, user, dirtyRooms]);
+  }, [date, session, user]);
 
   const handleRoomChange = (index: number, field: keyof RoomData, value: any) => {
     const newRooms = [...rooms];
@@ -198,6 +205,7 @@ export default function TeacherInput() {
     setDirtyRooms(prev => {
       const next = new Set(prev);
       next.add(index);
+      dirtyRoomsRef.current = next;
       return next;
     });
   };

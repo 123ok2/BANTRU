@@ -73,17 +73,19 @@ export default function PublicDashboard() {
       // Merge data from all teachers (if multiple)
       querySnapshot.forEach((doc) => {
         const data = doc.data();
+        if (!data || !Array.isArray(data.rooms)) return;
+        
         const docRooms = data.rooms as RoomData[];
         const teacherName = data.lastUpdatedName || data.teacherName || data.lastUpdatedEmail || data.teacherEmail; // Get teacher name
         
         docRooms.forEach((r) => {
-          if (r.roomNumber >= 1 && r.roomNumber <= ROOM_COUNT) {
+          if (r && typeof r === 'object' && r.roomNumber >= 1 && r.roomNumber <= ROOM_COUNT) {
             // Only update if there is data
             if (r.totalStudents || r.absentDetails) {
                 // Ensure we handle both string and number types from DB
                 const roomData = { 
                     ...r, 
-                    totalStudents: String(r.totalStudents),
+                    totalStudents: String(r.totalStudents || ""),
                     teacherName: teacherName // Attach teacher name to room data
                 };
                 mergedRooms[r.roomNumber - 1] = roomData;
@@ -117,12 +119,14 @@ export default function PublicDashboard() {
 
       querySnapshot.forEach((doc) => {
         const data = doc.data();
+        if (!data || !Array.isArray(data.rooms)) return;
+        
         const docRooms = data.rooms as RoomData[];
         
         docRooms.forEach((r) => {
-          if (r.absentDetails) {
+          if (r && typeof r === 'object' && r.absentDetails) {
             // Split by common delimiters: comma, semicolon, newline
-            const parts = r.absentDetails.split(/[,;\n]/);
+            const parts = String(r.absentDetails).split(/[,;\n]/);
             parts.forEach(part => {
                 // Remove content in parentheses (reason) and trim
                 let name = part.replace(/\(.*\)/, "").trim();
