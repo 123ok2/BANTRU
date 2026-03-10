@@ -20,19 +20,20 @@ interface StudentStat {
 
 const ROOM_COUNT = 18;
 
-const parseStudentCount = (val: any) => {
-  const str = String(val || "").trim();
+const parseStudentCount = (val: string | number) => {
+  const str = String(val).trim();
   if (!str) return { present: 0, total: 0 };
   
   if (str.includes('/')) {
-    const parts = str.split('/');
-    const present = Number(String(parts[0] || "").trim());
-    const total = Number(String(parts[1] || "").trim());
-    return { present: isNaN(present) ? 0 : present, total: isNaN(total) ? 0 : total };
+    const [present, total] = str.split('/').map(s => Number(s.trim()));
+    return { present: present || 0, total: total || 0 };
   }
   
   const num = Number(str);
-  return { present: isNaN(num) ? 0 : num, total: isNaN(num) ? 0 : num }; 
+  // If it's just a number, we assume it's the present count. 
+  // For total, it's ambiguous, but let's assume it's also the total (full attendance) 
+  // unless we have a better way to know the class size.
+  return { present: num || 0, total: num || 0 }; 
 };
 
 export default function PublicDashboard() {
@@ -72,19 +73,17 @@ export default function PublicDashboard() {
       // Merge data from all teachers (if multiple)
       querySnapshot.forEach((doc) => {
         const data = doc.data();
-        if (!data || !Array.isArray(data.rooms)) return;
-        
         const docRooms = data.rooms as RoomData[];
         const teacherName = data.lastUpdatedName || data.teacherName || data.lastUpdatedEmail || data.teacherEmail; // Get teacher name
         
         docRooms.forEach((r) => {
-          if (r && typeof r === 'object' && r.roomNumber >= 1 && r.roomNumber <= ROOM_COUNT) {
+          if (r.roomNumber >= 1 && r.roomNumber <= ROOM_COUNT) {
             // Only update if there is data
             if (r.totalStudents || r.absentDetails) {
                 // Ensure we handle both string and number types from DB
                 const roomData = { 
                     ...r, 
-                    totalStudents: String(r.totalStudents || ""),
+                    totalStudents: String(r.totalStudents),
                     teacherName: teacherName // Attach teacher name to room data
                 };
                 mergedRooms[r.roomNumber - 1] = roomData;
@@ -118,14 +117,12 @@ export default function PublicDashboard() {
 
       querySnapshot.forEach((doc) => {
         const data = doc.data();
-        if (!data || !Array.isArray(data.rooms)) return;
-        
         const docRooms = data.rooms as RoomData[];
         
         docRooms.forEach((r) => {
-          if (r && typeof r === 'object' && r.absentDetails) {
+          if (r.absentDetails) {
             // Split by common delimiters: comma, semicolon, newline
-            const parts = String(r.absentDetails).split(/[,;\n]/);
+            const parts = r.absentDetails.split(/[,;\n]/);
             parts.forEach(part => {
                 // Remove content in parentheses (reason) and trim
                 let name = part.replace(/\(.*\)/, "").trim();
@@ -163,13 +160,8 @@ export default function PublicDashboard() {
   }, []);
 
   const exportToExcel = () => {
-    try {
-      if (!rooms || rooms.length === 0) {
-        alert("Không có dữ liệu để xuất.");
-        return;
-      }
-      // 1. Prepare Data
-      const schoolName = "TRƯỜNG PTDTBT THCS THU CÚC";
+    // 1. Prepare Data
+    const schoolName = "TRƯỜNG PTDTBT THCS THU CÚC";
     const reportTitle = "BÁO CÁO ĐIỂM DANH BÁN TRÚ";
     const sessionText = session === "noon" ? "Buổi Trưa" : "Buổi Tối";
     // Format date to dd/MM/yyyy
@@ -306,10 +298,6 @@ export default function PublicDashboard() {
     
     const fileName = `DiemDanh_${date}_${session === "noon" ? "Trua" : "Toi"}.xlsx`;
     XLSX.writeFile(wb, fileName);
-    } catch (error) {
-      console.error("Excel export error:", error);
-      alert("Có lỗi xảy ra khi xuất file Excel. Vui lòng thử lại.");
-    }
   };
 
   return (
